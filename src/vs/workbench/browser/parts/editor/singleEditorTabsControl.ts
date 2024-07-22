@@ -51,7 +51,7 @@ export class SingleEditorTabsControl extends EditorTabsControl {
 		titleContainer.appendChild(labelContainer);
 
 		// Editor Label
-		this.editorLabel = this._register(this.instantiationService.createInstance(ResourceLabel, labelContainer, undefined)).element;
+		this.editorLabel = this._register(this.instantiationService.createInstance(ResourceLabel, labelContainer, { hoverDelegate: this.getHoverDelegate() })).element;
 		this._register(addDisposableListener(this.editorLabel.element, EventType.CLICK, e => this.onTitleLabelClick(e)));
 
 		// Breadcrumbs
@@ -179,17 +179,15 @@ export class SingleEditorTabsControl extends EditorTabsControl {
 		this.ifEditorIsActive(editor, () => this.redraw());
 	}
 
-	stickEditor(editor: EditorInput): void {
-		// Sticky editors are not presented any different with tabs disabled
-	}
+	stickEditor(editor: EditorInput): void { }
 
-	unstickEditor(editor: EditorInput): void {
-		// Sticky editors are not presented any different with tabs disabled
-	}
+	unstickEditor(editor: EditorInput): void { }
 
 	setActive(isActive: boolean): void {
 		this.redraw();
 	}
+
+	setEditorSelections(editors: EditorInput[], selected: boolean): void { }
 
 	updateEditorLabel(editor: EditorInput): void {
 		this.ifEditorIsActive(editor, () => this.redraw());
@@ -304,11 +302,6 @@ export class SingleEditorTabsControl extends EditorTabsControl {
 				description = editor.getDescription(this.getVerbosity(labelFormat)) || '';
 			}
 
-			let title = editor.getTitle(Verbosity.LONG);
-			if (description === title) {
-				title = ''; // dont repeat what is already shown
-			}
-
 			editorLabel.setResource(
 				{
 					resource: EditorResourceAccessor.getOriginalUri(editor, { supportSideBySide: SideBySideEditor.BOTH }),
@@ -316,7 +309,7 @@ export class SingleEditorTabsControl extends EditorTabsControl {
 					description
 				},
 				{
-					title,
+					title: this.getHoverTitle(editor),
 					italic: !isEditorPinned,
 					extraClasses: ['single-tab', 'title-label'].concat(editor.getLabelExtraClasses()),
 					fileDecorations: {
@@ -358,7 +351,7 @@ export class SingleEditorTabsControl extends EditorTabsControl {
 		// Inactive: only show "Close, "Unlock" and secondary actions
 		else {
 			return {
-				primary: editorActions.primary.filter(action => action.id === CLOSE_EDITOR_COMMAND_ID || action.id === UNLOCK_GROUP_COMMAND_ID),
+				primary: this.groupsView.partOptions.alwaysShowEditorActions ? editorActions.primary : editorActions.primary.filter(action => action.id === CLOSE_EDITOR_COMMAND_ID || action.id === UNLOCK_GROUP_COMMAND_ID),
 				secondary: editorActions.secondary
 			};
 		}

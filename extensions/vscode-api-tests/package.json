@@ -7,9 +7,10 @@
   "enabledApiProposals": [
     "activeComment",
     "authSession",
-    "chatAgents2",
-    "chatRequestAccess",
-    "defaultChatAgent",
+    "chatParticipant",
+    "languageModels",
+    "defaultChatParticipant",
+    "chatVariableResolver",
     "contribViewsRemote",
     "contribStatusBarItems",
     "createFileSystemWatcher",
@@ -18,10 +19,12 @@
     "documentFiltersExclusive",
     "documentPaste",
     "editorInsets",
+    "embeddings",
     "extensionRuntime",
     "extensionsAny",
     "externalUriOpener",
     "fileSearchProvider",
+    "findFiles2",
     "findTextInFiles",
     "fsChunks",
     "interactive",
@@ -42,8 +45,8 @@
     "taskPresentationGroup",
     "terminalDataWriteEvent",
     "terminalDimensions",
+    "terminalShellIntegration",
     "tunnels",
-    "testCoverage",
     "testObserver",
     "textSearchProvider",
     "timeline",
@@ -51,8 +54,7 @@
     "treeViewActiveItem",
     "treeViewReveal",
     "workspaceTrust",
-    "telemetry",
-    "windowActivity"
+    "telemetry"
   ],
   "private": true,
   "activationEvents": [],
@@ -62,6 +64,26 @@
   },
   "icon": "media/icon.png",
   "contributes": {
+    "chatParticipants": [
+      {
+        "id": "api-test.participant",
+        "name": "participant",
+        "description": "test",
+        "isDefault": true,
+        "commands": [
+          {
+            "name": "hello",
+            "description": "Hello"
+          }
+        ]
+      },
+      {
+        "id": "api-test.participant2",
+        "name": "participant2",
+        "description": "test",
+        "commands": []
+      }
+    ],
     "configuration": {
       "type": "object",
       "title": "Test Config",
@@ -221,7 +243,7 @@
   },
   "devDependencies": {
     "@types/mocha": "^9.1.1",
-    "@types/node": "18.x"
+    "@types/node": "20.x"
   },
   "repository": {
     "type": "git",

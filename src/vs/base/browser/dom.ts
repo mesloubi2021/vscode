@@ -188,7 +188,7 @@ function _wrapAsStandardKeyboardEvent(handler: (e: IKeyboardEvent) => void): (e:
 export const addStandardDisposableListener: IAddStandardDisposableListenerSignature = function addStandardDisposableListener(node: HTMLElement, type: string, handler: (event: any) => void, useCapture?: boolean): IDisposable {
 	let wrapHandler = handler;
 
-	if (type === 'click' || type === 'mousedown') {
+	if (type === 'click' || type === 'mousedown' || type === 'contextmenu') {
 		wrapHandler = _wrapAsStandardMouseEvent(getWindow(node), handler);
 	} else if (type === 'keydown' || type === 'keypress' || type === 'keyup') {
 		wrapHandler = _wrapAsStandardKeyboardEvent(handler);
@@ -919,13 +919,6 @@ export function getActiveDocument(): Document {
 export function getActiveWindow(): CodeWindow {
 	const document = getActiveDocument();
 	return (document.defaultView?.window ?? mainWindow) as CodeWindow;
-}
-
-export function focusWindow(element: Node): void {
-	const window = getWindow(element);
-	if (!window.document.hasFocus()) {
-		window.focus();
-	}
 }
 
 const globalStylesheets = new Map<HTMLStyleElement /* main stylesheet */, Set<HTMLStyleElement /* aux window clones that track the main stylesheet */>>();
