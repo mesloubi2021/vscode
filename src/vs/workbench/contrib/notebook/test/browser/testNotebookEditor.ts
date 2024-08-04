@@ -41,7 +41,7 @@ import { UndoRedoService } from 'vs/platform/undoRedo/common/undoRedoService';
 import { IWorkspaceTrustRequestService } from 'vs/platform/workspace/common/workspaceTrust';
 import { EditorInput } from 'vs/workbench/common/editor/editorInput';
 import { EditorModel } from 'vs/workbench/common/editor/editorModel';
-import { CellFindMatchWithIndex, IActiveNotebookEditorDelegate, IBaseCellEditorOptions, ICellViewModel, INotebookEditorDelegate } from 'vs/workbench/contrib/notebook/browser/notebookBrowser';
+import { CellFindMatchWithIndex, CellFocusMode, IActiveNotebookEditorDelegate, IBaseCellEditorOptions, ICellViewModel, INotebookEditorDelegate } from 'vs/workbench/contrib/notebook/browser/notebookBrowser';
 import { NotebookCellStateChangedEvent, NotebookLayoutInfo } from 'vs/workbench/contrib/notebook/browser/notebookViewEvents';
 import { NotebookCellStatusBarService } from 'vs/workbench/contrib/notebook/browser/services/notebookCellStatusBarServiceImpl';
 import { ListViewInfoAccessor, NotebookCellList } from 'vs/workbench/contrib/notebook/browser/view/notebookCellList';
@@ -62,6 +62,9 @@ import { TestLayoutService } from 'vs/workbench/test/browser/workbenchTestServic
 import { TestStorageService, TestWorkspaceTrustRequestService } from 'vs/workbench/test/common/workbenchTestServices';
 import { FontInfo } from 'vs/editor/common/config/fontInfo';
 import { EditorFontLigatures, EditorFontVariations } from 'vs/editor/common/config/editorOptions';
+import { ICodeEditorService } from 'vs/editor/browser/services/codeEditorService';
+import { mainWindow } from 'vs/base/browser/window';
+import { TestCodeEditorService } from 'vs/editor/test/browser/editorTestServices';
 
 export class TestCell extends NotebookCellTextModel {
 	constructor(
@@ -175,10 +178,11 @@ export class NotebookEditorTestModel extends EditorModel implements INotebookEdi
 
 export function setupInstantiationService(disposables: DisposableStore) {
 	const instantiationService = disposables.add(new TestInstantiationService());
+	const testThemeService = new TestThemeService();
 	instantiationService.stub(ILanguageService, disposables.add(new LanguageService()));
 	instantiationService.stub(IUndoRedoService, instantiationService.createInstance(UndoRedoService));
 	instantiationService.stub(IConfigurationService, new TestConfigurationService());
-	instantiationService.stub(IThemeService, new TestThemeService());
+	instantiationService.stub(IThemeService, testThemeService);
 	instantiationService.stub(ILanguageConfigurationService, disposables.add(new TestLanguageConfigurationService()));
 	instantiationService.stub(IModelService, disposables.add(instantiationService.createInstance(ModelService)));
 	instantiationService.stub(ITextModelService, <ITextModelService>disposables.add(instantiationService.createInstance(TextModelResolverService)));
@@ -192,6 +196,7 @@ export function setupInstantiationService(disposables: DisposableStore) {
 	instantiationService.stub(INotebookExecutionStateService, new TestNotebookExecutionStateService());
 	instantiationService.stub(IKeybindingService, new MockKeybindingService());
 	instantiationService.stub(INotebookCellStatusBarService, disposables.add(new NotebookCellStatusBarService()));
+	instantiationService.stub(ICodeEditorService, disposables.add(new TestCodeEditorService(testThemeService)));
 
 	return instantiationService;
 }
@@ -211,7 +216,7 @@ function _createTestNotebookEditor(instantiationService: TestInstantiationServic
 	}), {}, { transientCellMetadata: {}, transientDocumentMetadata: {}, cellContentMetadata: {}, transientOutputs: false }));
 
 	const model = disposables.add(new NotebookEditorTestModel(notebook));
-	const notebookOptions = disposables.add(new NotebookOptions(instantiationService.get(IConfigurationService), instantiationService.get(INotebookExecutionStateService), false));
+	const notebookOptions = disposables.add(new NotebookOptions(mainWindow, instantiationService.get(IConfigurationService), instantiationService.get(INotebookExecutionStateService), instantiationService.get(ICodeEditorService), false));
 	const viewContext = new ViewContext(notebookOptions, disposables.add(new NotebookEventDispatcher()), () => ({} as IBaseCellEditorOptions));
 	const viewModel: NotebookViewModel = disposables.add(instantiationService.createInstance(NotebookViewModel, viewType, model.notebook, viewContext, null, { isReadOnly: false }));
 
@@ -222,6 +227,7 @@ function _createTestNotebookEditor(instantiationService: TestInstantiationServic
 	let visibleRanges: ICellRange[] = [{ start: 0, end: 100 }];
 
 	const notebookEditor: IActiveNotebookEditorDelegate = new class extends mock<IActiveNotebookEditorDelegate>() {
+		// eslint-disable-next-line local/code-must-use-super-dispose
 		override dispose() {
 			viewModel.dispose();
 		}
@@ -276,7 +282,11 @@ function _createTestNotebookEditor(instantiationService: TestInstantiationServic
 		override async revealRangeInCenterIfOutsideViewportAsync() { }
 		override async layoutNotebookCell() { }
 		override async removeInset() { }
-		override async focusNotebookCell() { }
+		override async focusNotebookCell(cell: ICellViewModel, focusItem: 'editor' | 'container' | 'output') {
+			cell.focusMode = focusItem === 'editor' ? CellFocusMode.Editor
+				: focusItem === 'output' ? CellFocusMode.Output
+					: CellFocusMode.Container;
+		}
 		override cellAt(index: number) { return viewModel.cellAt(index)!; }
 		override getCellIndex(cell: ICellViewModel) { return viewModel.getCellIndex(cell); }
 		override getCellsInRange(range?: ICellRange) { return viewModel.getCellsInRange(range); }
@@ -430,7 +440,7 @@ export function createNotebookCellList(instantiationService: TestInstantiationSe
 	};
 
 	const notebookOptions = !!viewContext ? viewContext.notebookOptions
-		: disposables.add(new NotebookOptions(instantiationService.get(IConfigurationService), instantiationService.get(INotebookExecutionStateService), false));
+		: disposables.add(new NotebookOptions(mainWindow, instantiationService.get(IConfigurationService), instantiationService.get(INotebookExecutionStateService), instantiationService.get(ICodeEditorService), false));
 	const cellList: NotebookCellList = disposables.add(instantiationService.createInstance(
 		NotebookCellList,
 		'NotebookCellList',

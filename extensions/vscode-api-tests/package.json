@@ -5,9 +5,14 @@
   "publisher": "vscode",
   "license": "MIT",
   "enabledApiProposals": [
+    "activeComment",
     "authSession",
+    "chatAgents2",
+    "chatRequestAccess",
+    "defaultChatAgent",
     "contribViewsRemote",
     "contribStatusBarItems",
+    "createFileSystemWatcher",
     "customEditorMove",
     "diffCommand",
     "documentFiltersExclusive",
@@ -19,6 +24,7 @@
     "fileSearchProvider",
     "findTextInFiles",
     "fsChunks",
+    "interactive",
     "mappedEditsProvider",
     "notebookCellExecutionState",
     "notebookDeprecated",
@@ -27,9 +33,8 @@
     "notebookMime",
     "portsAttributes",
     "quickPickSortByLabel",
-    "readonlyMessage",
+    "languageStatusText",
     "resolvers",
-    "saveEditor",
     "scmActionButton",
     "scmSelectedProvider",
     "scmTextDocument",
@@ -40,16 +45,14 @@
     "tunnels",
     "testCoverage",
     "testObserver",
-    "testMessageContextValue",
     "textSearchProvider",
     "timeline",
     "tokenInformation",
-	  "treeViewActiveItem",
+    "treeViewActiveItem",
     "treeViewReveal",
     "workspaceTrust",
     "telemetry",
-    "windowActivity",
-    "interactiveUserActions"
+    "windowActivity"
   ],
   "private": true,
   "activationEvents": [],
@@ -161,6 +164,12 @@
             "program": "${workspaceFolder}/file.md"
           }
         ]
+      }
+    ],
+    "interactiveSession": [
+      {
+        "id": "provider",
+        "label": "Provider"
       }
     ],
     "notebooks": [

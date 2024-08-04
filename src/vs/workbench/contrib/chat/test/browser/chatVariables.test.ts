@@ -13,6 +13,7 @@ import { ChatVariablesService } from 'vs/workbench/contrib/chat/browser/chatVari
 import { ChatAgentService, IChatAgentService } from 'vs/workbench/contrib/chat/common/chatAgents';
 import { ChatRequestParser } from 'vs/workbench/contrib/chat/common/chatRequestParser';
 import { IChatVariablesService } from 'vs/workbench/contrib/chat/common/chatVariables';
+import { MockChatWidgetService } from 'vs/workbench/contrib/chat/test/browser/mockChatWidget';
 import { IExtensionService } from 'vs/workbench/services/extensions/common/extensions';
 import { TestExtensionService, TestStorageService } from 'vs/workbench/test/common/workbenchTestServices';
 
@@ -23,7 +24,7 @@ suite('ChatVariables', function () {
 	const testDisposables = ensureNoDisposablesAreLeakedInTestSuite();
 
 	setup(function () {
-		service = new ChatVariablesService(null!);
+		service = new ChatVariablesService(new MockChatWidgetService());
 		instantiationService = testDisposables.add(new TestInstantiationService());
 		instantiationService.stub(IStorageService, testDisposables.add(new TestStorageService()));
 		instantiationService.stub(ILogService, new NullLogService());
@@ -48,13 +49,13 @@ suite('ChatVariables', function () {
 			const data = await resolveVariables('Hello #foo and#far');
 			assert.strictEqual(Object.keys(data.variables).length, 1);
 			assert.deepEqual(Object.keys(data.variables).sort(), ['foo']);
-			assert.strictEqual(data.prompt, 'Hello [#foo](values:foo) and#far');
+			assert.strictEqual(data.message, 'Hello [#foo](values:foo) and#far');
 		}
 		{
 			const data = await resolveVariables('#foo Hello');
 			assert.strictEqual(Object.keys(data.variables).length, 1);
 			assert.deepEqual(Object.keys(data.variables).sort(), ['foo']);
-			assert.strictEqual(data.prompt, '[#foo](values:foo) Hello');
+			assert.strictEqual(data.message, '[#foo](values:foo) Hello');
 		}
 		{
 			const data = await resolveVariables('Hello #foo');
@@ -65,7 +66,7 @@ suite('ChatVariables', function () {
 			const data = await resolveVariables('Hello #foo?');
 			assert.strictEqual(Object.keys(data.variables).length, 1);
 			assert.deepEqual(Object.keys(data.variables).sort(), ['foo']);
-			assert.strictEqual(data.prompt, 'Hello [#foo](values:foo)?');
+			assert.strictEqual(data.message, 'Hello [#foo](values:foo)?');
 		}
 		{
 			const data = await resolveVariables('Hello #foo and#far #foo');
@@ -81,7 +82,7 @@ suite('ChatVariables', function () {
 			const data = await resolveVariables('Hello #foo and #far #foo #unknown');
 			assert.strictEqual(Object.keys(data.variables).length, 2);
 			assert.deepEqual(Object.keys(data.variables).sort(), ['far', 'foo']);
-			assert.strictEqual(data.prompt, 'Hello [#foo](values:foo) and [#far](values:far) [#foo](values:foo) #unknown');
+			assert.strictEqual(data.message, 'Hello [#foo](values:foo) and [#far](values:far) [#foo](values:foo) #unknown');
 		}
 
 		v1.dispose();
