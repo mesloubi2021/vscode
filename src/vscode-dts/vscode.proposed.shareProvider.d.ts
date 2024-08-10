@@ -20,6 +20,9 @@ declare module 'vscode' {
 		 * If present, a selection within the `resourceUri`.
 		 */
 		selection?: Range;
+		// More test changes
+
+		// Test changes
 	}
 
 	/**
@@ -27,11 +30,15 @@ declare module 'vscode' {
 	 */
 	export interface ShareProvider {
 
+
+
 		/**
 		 * A unique ID for the provider.
 		 * This will be used to activate specific extensions contributing share providers if necessary.
 		 */
 		readonly id: string;
+
+
 
 		/**
 		 * A label which will be used to present this provider's options in the UI.
