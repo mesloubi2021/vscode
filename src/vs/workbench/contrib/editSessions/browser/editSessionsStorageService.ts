@@ -311,7 +311,7 @@ export class EditSessionsWorkbenchService extends Disposable implements IEditSes
 	 * Prompts the user to pick an authentication option for storing and getting edit sessions.
 	 */
 	private async getAccountPreference(reason: 'read' | 'write'): Promise<AuthenticationSession & { providerId: string } | undefined> {
-		const quickpick = this.quickInputService.createQuickPick<ExistingSession | AuthenticationProviderOption | IQuickPickItem>();
+		const quickpick = this.quickInputService.createQuickPick<ExistingSession | AuthenticationProviderOption | IQuickPickItem>({ useSeparators: true });
 		quickpick.ok = false;
 		quickpick.placeholder = reason === 'read' ? localize('choose account read placeholder', "Select an account to restore your working changes from the cloud") : localize('choose account placeholder', "Select an account to store your working changes in the cloud");
 		quickpick.ignoreFocusOut = true;
@@ -346,8 +346,8 @@ export class EditSessionsWorkbenchService extends Disposable implements IEditSes
 
 		for (const authenticationProvider of (await this.getAuthenticationProviders())) {
 			const signedInForProvider = sessions.some(account => account.session.providerId === authenticationProvider.id);
-			if (!signedInForProvider || this.authenticationService.supportsMultipleAccounts(authenticationProvider.id)) {
-				const providerName = this.authenticationService.getLabel(authenticationProvider.id);
+			if (!signedInForProvider || this.authenticationService.getProvider(authenticationProvider.id).supportsMultipleAccounts) {
+				const providerName = this.authenticationService.getProvider(authenticationProvider.id).label;
 				options.push({ label: localize('sign in using account', "Sign in with {0}", providerName), provider: authenticationProvider });
 			}
 		}
@@ -370,7 +370,7 @@ export class EditSessionsWorkbenchService extends Disposable implements IEditSes
 			for (const session of sessions) {
 				const item = {
 					label: session.account.label,
-					description: this.authenticationService.getLabel(provider.id),
+					description: this.authenticationService.getProvider(provider.id).label,
 					session: { ...session, providerId: provider.id }
 				};
 				accounts.set(item.session.account.id, item);

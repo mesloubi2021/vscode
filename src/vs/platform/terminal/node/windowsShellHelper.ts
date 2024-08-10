@@ -143,6 +143,8 @@ export class WindowsShellHelper extends Disposable implements IWindowsShellHelpe
 			case 'bash.exe':
 			case 'git-cmd.exe':
 				return WindowsShellType.GitBash;
+			case 'julia.exe:':
+				return WindowsShellType.Julia;
 			case 'wsl.exe':
 			case 'ubuntu.exe':
 			case 'ubuntu1804.exe':
@@ -152,6 +154,9 @@ export class WindowsShellHelper extends Disposable implements IWindowsShellHelpe
 			case 'sles-12.exe':
 				return WindowsShellType.Wsl;
 			default:
+				if (executable.match(/python(\d(\.\d{0,2})?)?\.exe/)) {
+					return WindowsShellType.Python;
+				}
 				return undefined;
 		}
 	}

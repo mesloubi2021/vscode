@@ -28,17 +28,20 @@ import { IExtHostRpcService } from 'vs/workbench/api/common/extHostRpcService';
 import { GlobPattern } from 'vs/workbench/api/common/extHostTypeConverters';
 import { Range } from 'vs/workbench/api/common/extHostTypes';
 import { IURITransformerService } from 'vs/workbench/api/common/extHostUriTransformerService';
-import { ITextQueryBuilderOptions } from 'vs/workbench/services/search/common/queryBuilder';
+import { IFileQueryBuilderOptions, ITextQueryBuilderOptions } from 'vs/workbench/services/search/common/queryBuilder';
 import { IRawFileMatch2, ITextSearchResult, resultIsMatch } from 'vs/workbench/services/search/common/search';
 import * as vscode from 'vscode';
 import { ExtHostWorkspaceShape, IRelativePatternDto, IWorkspaceData, MainContext, MainThreadMessageOptions, MainThreadMessageServiceShape, MainThreadWorkspaceShape } from './extHost.protocol';
 import { revive } from 'vs/base/common/marshalling';
+import { AuthInfo, Credentials } from 'vs/platform/request/common/request';
 
 export interface IExtHostWorkspaceProvider {
 	getWorkspaceFolder2(uri: vscode.Uri, resolveParent?: boolean): Promise<vscode.WorkspaceFolder | undefined>;
 	resolveWorkspaceFolder(uri: vscode.Uri): Promise<vscode.WorkspaceFolder | undefined>;
 	getWorkspaceFolders2(): Promise<vscode.WorkspaceFolder[] | undefined>;
 	resolveProxy(url: string): Promise<string | undefined>;
+	lookupAuthorization(authInfo: AuthInfo): Promise<Credentials | undefined>;
+	lookupKerberosAuthorization(url: string): Promise<string | undefined>;
 	loadCertificates(): Promise<string[]>;
 }
 
@@ -132,7 +135,7 @@ class ExtHostWorkspaceImpl extends Workspace {
 
 	constructor(id: string, private _name: string, folders: vscode.WorkspaceFolder[], transient: boolean, configuration: URI | null, private _isUntitled: boolean, ignorePathCasing: (key: URI) => boolean) {
 		super(id, folders.map(f => new WorkspaceFolder(f)), transient, configuration, ignorePathCasing);
-		this._structure = TernarySearchTree.forUris<vscode.WorkspaceFolder>(ignorePathCasing);
+		this._structure = TernarySearchTree.forUris<vscode.WorkspaceFolder>(ignorePathCasing, () => true);
 
 		// setup the workspace folder data structure
 		folders.forEach(folder => {
@@ -418,7 +421,7 @@ export class ExtHostWorkspace implements ExtHostWorkspaceShape, IExtHostWorkspac
 				configuration: this._actualWorkspace.configuration,
 				folders,
 				isUntitled: this._actualWorkspace.isUntitled
-			} as IWorkspaceData, this._actualWorkspace, undefined, this._extHostFileSystemInfo).workspace || undefined;
+			}, this._actualWorkspace, undefined, this._extHostFileSystemInfo).workspace || undefined;
 		}
 	}
 
@@ -446,33 +449,80 @@ export class ExtHostWorkspace implements ExtHostWorkspaceShape, IExtHostWorkspac
 	findFiles(include: vscode.GlobPattern | undefined, exclude: vscode.GlobPattern | null | undefined, maxResults: number | undefined, extensionId: ExtensionIdentifier, token: vscode.CancellationToken = CancellationToken.None): Promise<vscode.Uri[]> {
 		this._logService.trace(`extHostWorkspace#findFiles: fileSearch, extension: ${extensionId.value}, entryPoint: findFiles`);
 
-		let excludePatternOrDisregardExcludes: string | false | undefined = undefined;
+		let excludeString: string = '';
+		let useFileExcludes = true;
 		if (exclude === null) {
-			excludePatternOrDisregardExcludes = false;
-		} else if (exclude) {
+			useFileExcludes = false;
+		} else if (exclude !== undefined) {
 			if (typeof exclude === 'string') {
-				excludePatternOrDisregardExcludes = exclude;
+				excludeString = exclude;
 			} else {
-				excludePatternOrDisregardExcludes = exclude.pattern;
+				excludeString = exclude.pattern;
 			}
 		}
+		return this._findFilesImpl(include, undefined, {
+			exclude: excludeString,
+			maxResults,
+			useDefaultExcludes: useFileExcludes,
+			useDefaultSearchExcludes: false,
+			useIgnoreFiles: false
+		}, token);
+	}
 
+	findFiles2(filePattern: vscode.GlobPattern | undefined,
+		options: vscode.FindFiles2Options = {},
+		extensionId: ExtensionIdentifier,
+		token: vscode.CancellationToken = CancellationToken.None): Promise<vscode.Uri[]> {
+		this._logService.trace(`extHostWorkspace#findFiles2: fileSearch, extension: ${extensionId.value}, entryPoint: findFiles2`);
+		return this._findFilesImpl(undefined, filePattern, options, token);
+	}
+
+	private async _findFilesImpl(
+		// the old `findFiles` used `include` to query, but the new `findFiles2` uses `filePattern` to query.
+		// `filePattern` is the proper way to handle this, since it takes less precedence than the ignore files.
+		include: vscode.GlobPattern | undefined,
+		filePattern: vscode.GlobPattern | undefined,
+		options: vscode.FindFiles2Options,
+		token: vscode.CancellationToken = CancellationToken.None): Promise<vscode.Uri[]> {
 		if (token && token.isCancellationRequested) {
 			return Promise.resolve([]);
 		}
 
-		const { includePattern, folder } = parseSearchInclude(GlobPattern.from(include));
+		const excludePattern = (typeof options.exclude === 'string') ? options.exclude :
+			options.exclude ? options.exclude.pattern : undefined;
+
+		const fileQueries: IFileQueryBuilderOptions = {
+			ignoreSymlinks: typeof options.followSymlinks === 'boolean' ? !options.followSymlinks : undefined,
+			disregardIgnoreFiles: typeof options.useIgnoreFiles === 'boolean' ? !options.useIgnoreFiles : undefined,
+			disregardGlobalIgnoreFiles: typeof options.useGlobalIgnoreFiles === 'boolean' ? !options.useGlobalIgnoreFiles : undefined,
+			disregardParentIgnoreFiles: typeof options.useParentIgnoreFiles === 'boolean' ? !options.useParentIgnoreFiles : undefined,
+			disregardExcludeSettings: typeof options.useDefaultExcludes === 'boolean' ? !options.useDefaultExcludes : false,
+			disregardSearchExcludeSettings: typeof options.useDefaultSearchExcludes === 'boolean' ? !options.useDefaultSearchExcludes : false,
+			maxResults: options.maxResults,
+			excludePattern: excludePattern,
+			shouldGlobSearch: typeof options.fuzzy === 'boolean' ? !options.fuzzy : true,
+			_reason: 'startFileSearch'
+		};
+		let folderToUse: URI | undefined;
+		if (include) {
+			const { includePattern, folder } = parseSearchInclude(GlobPattern.from(include));
+			folderToUse = folder;
+			fileQueries.includePattern = includePattern;
+		} else {
+			const { includePattern, folder } = parseSearchInclude(GlobPattern.from(filePattern));
+			folderToUse = folder;
+			fileQueries.filePattern = includePattern;
+		}
+
 		return this._proxy.$startFileSearch(
-			includePattern ?? null,
-			folder ?? null,
-			excludePatternOrDisregardExcludes ?? null,
-			maxResults ?? null,
+			folderToUse ?? null,
+			fileQueries,
 			token
 		)
 			.then(data => Array.isArray(data) ? data.map(d => URI.revive(d)) : []);
 	}
 
-	async findTextInFiles(query: vscode.TextSearchQuery, options: vscode.FindTextInFilesOptions, callback: (result: vscode.TextSearchResult) => void, extensionId: ExtensionIdentifier, token: vscode.CancellationToken = CancellationToken.None): Promise<vscode.TextSearchComplete> {
+	async findTextInFiles(query: vscode.TextSearchQuery, options: vscode.FindTextInFilesOptions & { useSearchExclude?: boolean }, callback: (result: vscode.TextSearchResult) => void, extensionId: ExtensionIdentifier, token: vscode.CancellationToken = CancellationToken.None): Promise<vscode.TextSearchComplete> {
 		this._logService.trace(`extHostWorkspace#findTextInFiles: textSearch, extension: ${extensionId.value}, entryPoint: findTextInFiles`);
 
 		const requestId = this._requestIdProvider.getNext();
@@ -493,6 +543,7 @@ export class ExtHostWorkspace implements ExtHostWorkspaceShape, IExtHostWorkspac
 			disregardGlobalIgnoreFiles: typeof options.useGlobalIgnoreFiles === 'boolean' ? !options.useGlobalIgnoreFiles : undefined,
 			disregardParentIgnoreFiles: typeof options.useParentIgnoreFiles === 'boolean' ? !options.useParentIgnoreFiles : undefined,
 			disregardExcludeSettings: typeof options.useDefaultExcludes === 'boolean' ? !options.useDefaultExcludes : true,
+			disregardSearchExcludeSettings: typeof options.useSearchExclude === 'boolean' ? !options.useSearchExclude : true,
 			fileEncoding: options.encoding,
 			maxResults: options.maxResults,
 			previewOptions,
@@ -514,7 +565,7 @@ export class ExtHostWorkspace implements ExtHostWorkspaceShape, IExtHostWorkspac
 			p.results!.forEach(rawResult => {
 				const result: ITextSearchResult<URI> = revive(rawResult);
 				if (resultIsMatch(result)) {
-					callback(<vscode.TextSearchMatch>{
+					callback({
 						uri,
 						preview: {
 							text: result.preview.text,
@@ -525,13 +576,13 @@ export class ExtHostWorkspace implements ExtHostWorkspaceShape, IExtHostWorkspac
 						ranges: mapArrayOrNot(
 							result.ranges,
 							r => new Range(r.startLineNumber, r.startColumn, r.endLineNumber, r.endColumn))
-					});
+					} satisfies vscode.TextSearchMatch);
 				} else {
-					callback(<vscode.TextSearchContext>{
+					callback({
 						uri,
 						text: result.text,
 						lineNumber: result.lineNumber
-					});
+					} satisfies vscode.TextSearchContext);
 				}
 			});
 		};
@@ -577,6 +628,14 @@ export class ExtHostWorkspace implements ExtHostWorkspaceShape, IExtHostWorkspac
 
 	resolveProxy(url: string): Promise<string | undefined> {
 		return this._proxy.$resolveProxy(url);
+	}
+
+	lookupAuthorization(authInfo: AuthInfo): Promise<Credentials | undefined> {
+		return this._proxy.$lookupAuthorization(authInfo);
+	}
+
+	lookupKerberosAuthorization(url: string): Promise<string | undefined> {
+		return this._proxy.$lookupKerberosAuthorization(url);
 	}
 
 	loadCertificates(): Promise<string[]> {

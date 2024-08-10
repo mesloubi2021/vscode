@@ -363,7 +363,7 @@ export class RemoteTunnelWorkbenchContribution extends Disposable implements IWo
 
 	private async getAuthenticationSession(): Promise<ExistingSessionItem | undefined> {
 		const sessions = await this.getAllSessions();
-		const quickpick = this.quickInputService.createQuickPick<ExistingSessionItem | AuthenticationProviderOption | IQuickPickItem>();
+		const quickpick = this.quickInputService.createQuickPick<ExistingSessionItem | AuthenticationProviderOption | IQuickPickItem>({ useSeparators: true });
 		quickpick.ok = false;
 		quickpick.placeholder = localize('accountPreference.placeholder', "Sign in to an account to enable remote access");
 		quickpick.ignoreFocusOut = true;
@@ -395,7 +395,7 @@ export class RemoteTunnelWorkbenchContribution extends Disposable implements IWo
 	private createExistingSessionItem(session: AuthenticationSession, providerId: string): ExistingSessionItem {
 		return {
 			label: session.account.label,
-			description: this.authenticationService.getLabel(providerId),
+			description: this.authenticationService.getProvider(providerId).label,
 			session,
 			providerId
 		};
@@ -412,9 +412,9 @@ export class RemoteTunnelWorkbenchContribution extends Disposable implements IWo
 
 		for (const authenticationProvider of (await this.getAuthenticationProviders())) {
 			const signedInForProvider = sessions.some(account => account.providerId === authenticationProvider.id);
-			if (!signedInForProvider || this.authenticationService.supportsMultipleAccounts(authenticationProvider.id)) {
-				const providerName = this.authenticationService.getLabel(authenticationProvider.id);
-				options.push({ label: localize({ key: 'sign in using account', comment: ['{0} will be a auth provider (e.g. Github)'] }, "Sign in with {0}", providerName), provider: authenticationProvider });
+			const provider = this.authenticationService.getProvider(authenticationProvider.id);
+			if (!signedInForProvider || provider.supportsMultipleAccounts) {
+				options.push({ label: localize({ key: 'sign in using account', comment: ['{0} will be a auth provider (e.g. Github)'] }, "Sign in with {0}", provider.label), provider: authenticationProvider });
 			}
 		}
 
@@ -750,7 +750,7 @@ export class RemoteTunnelWorkbenchContribution extends Disposable implements IWo
 
 		return new Promise<void>((c, e) => {
 			const disposables = new DisposableStore();
-			const quickPick = this.quickInputService.createQuickPick();
+			const quickPick = this.quickInputService.createQuickPick({ useSeparators: true });
 			quickPick.placeholder = localize('manage.placeholder', 'Select a command to invoke');
 			disposables.add(quickPick);
 			const items: Array<QuickPickItem> = [];
@@ -797,6 +797,7 @@ Registry.as<IConfigurationRegistry>(ConfigurationExtensions.Configuration).regis
 			description: localize('remoteTunnelAccess.machineName', "The name under which the remote tunnel access is registered. If not set, the host name is used."),
 			type: 'string',
 			scope: ConfigurationScope.APPLICATION,
+			ignoreSync: true,
 			pattern: '^(\\w[\\w-]*)?$',
 			patternErrorMessage: localize('remoteTunnelAccess.machineNameRegex', "The name must only consist of letters, numbers, underscore and dash. It must not start with a dash."),
 			maxLength: 20,

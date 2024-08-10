@@ -29,8 +29,7 @@ export const fixedEditorOptions: IEditorOptions = {
 	selectOnLineNumbers: false,
 	wordWrap: 'off',
 	lineNumbers: 'off',
-	lineDecorationsWidth: 0,
-	glyphMargin: false,
+	glyphMargin: true,
 	fixedOverflowWidgets: true,
 	minimap: { enabled: false },
 	renderValidationDecorations: 'on',
@@ -50,4 +49,6 @@ export const fixedDiffEditorOptions: IDiffEditorConstructionOptions = {
 	wordWrap: 'off',
 	diffWordWrap: 'off',
 	diffAlgorithm: 'advanced',
+	renderSideBySide: true,
+	useInlineViewWhenSpaceIsLimited: false
 };
