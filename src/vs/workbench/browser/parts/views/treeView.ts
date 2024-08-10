@@ -8,8 +8,7 @@ import * as DOM from 'vs/base/browser/dom';
 import { renderMarkdownAsPlaintext } from 'vs/base/browser/markdownRenderer';
 import { ActionBar, IActionViewItemProvider } from 'vs/base/browser/ui/actionbar/actionbar';
 import { ActionViewItem } from 'vs/base/browser/ui/actionbar/actionViewItems';
-import { IHoverDelegate, IHoverDelegateOptions } from 'vs/base/browser/ui/iconLabel/iconHoverDelegate';
-import { ITooltipMarkdownString } from 'vs/base/browser/ui/iconLabel/iconLabelHover';
+import { IHoverDelegate } from 'vs/base/browser/ui/hover/hoverDelegate';
 import { IIdentityProvider, IListVirtualDelegate } from 'vs/base/browser/ui/list/list';
 import { ElementsDragAndDropData, ListViewTargetSector } from 'vs/base/browser/ui/list/listView';
 import { IAsyncDataSource, ITreeContextMenuEvent, ITreeDragAndDrop, ITreeDragOverReaction, ITreeNode, ITreeRenderer, TreeDragOverBubble } from 'vs/base/browser/ui/tree/tree';
@@ -22,7 +21,7 @@ import { isCancellationError } from 'vs/base/common/errors';
 import { Emitter, Event } from 'vs/base/common/event';
 import { createMatches, FuzzyScore } from 'vs/base/common/filters';
 import { IMarkdownString, isMarkdownString } from 'vs/base/common/htmlContent';
-import { Disposable, DisposableStore, IDisposable, toDisposable } from 'vs/base/common/lifecycle';
+import { Disposable, DisposableStore, IDisposable, MutableDisposable, toDisposable } from 'vs/base/common/lifecycle';
 import { Mimes } from 'vs/base/common/mime';
 import { Schemas } from 'vs/base/common/network';
 import { basename, dirname } from 'vs/base/common/resources';
@@ -56,13 +55,12 @@ import { ThemeIcon } from 'vs/base/common/themables';
 import { fillEditorsDragData } from 'vs/workbench/browser/dnd';
 import { IResourceLabel, ResourceLabels } from 'vs/workbench/browser/labels';
 import { API_OPEN_DIFF_EDITOR_COMMAND_ID, API_OPEN_EDITOR_COMMAND_ID } from 'vs/workbench/browser/parts/editor/editorCommands';
-import { IViewPaneOptions, ViewPane } from 'vs/workbench/browser/parts/views/viewPane';
+import { getLocationBasedViewColors, IViewPaneOptions, ViewPane } from 'vs/workbench/browser/parts/views/viewPane';
 import { IViewletViewOptions } from 'vs/workbench/browser/parts/views/viewsViewlet';
-import { PANEL_BACKGROUND, SIDE_BAR_BACKGROUND } from 'vs/workbench/common/theme';
 import { Extensions, ITreeItem, ITreeItemLabel, ITreeView, ITreeViewDataProvider, ITreeViewDescriptor, ITreeViewDragAndDropController, IViewBadge, IViewDescriptorService, IViewsRegistry, ResolvableTreeItem, TreeCommand, TreeItemCollapsibleState, TreeViewItemHandleArg, TreeViewPaneHandleArg, ViewContainer, ViewContainerLocation } from 'vs/workbench/common/views';
 import { IActivityService, NumberBadge } from 'vs/workbench/services/activity/common/activity';
 import { IExtensionService } from 'vs/workbench/services/extensions/common/extensions';
-import { IHoverService } from 'vs/platform/hover/browser/hover';
+import { IHoverService, WorkbenchHoverDelegate } from 'vs/platform/hover/browser/hover';
 import { ITreeViewsService } from 'vs/workbench/services/views/browser/treeViewsService';
 import { CodeDataTransfers, LocalSelectionTransfer } from 'vs/platform/dnd/browser/dnd';
 import { toExternalVSDataTransfer } from 'vs/editor/browser/dnd';
@@ -73,6 +71,7 @@ import { TelemetryTrustedValue } from 'vs/platform/telemetry/common/telemetryUti
 import { ITreeViewsDnDService } from 'vs/editor/common/services/treeViewsDndService';
 import { DraggedTreeItemsIdentifier } from 'vs/editor/common/services/treeViewsDnd';
 import { IMarkdownRenderResult, MarkdownRenderer } from 'vs/editor/browser/widget/markdownRenderer/browser/markdownRenderer';
+import type { IUpdatableHoverTooltipMarkdownString } from 'vs/base/browser/ui/hover/hover';
 
 export class TreeViewPane extends ViewPane {
 
@@ -91,9 +90,10 @@ export class TreeViewPane extends ViewPane {
 		@IOpenerService openerService: IOpenerService,
 		@IThemeService themeService: IThemeService,
 		@ITelemetryService telemetryService: ITelemetryService,
-		@INotificationService notificationService: INotificationService
+		@INotificationService notificationService: INotificationService,
+		@IHoverService hoverService: IHoverService
 	) {
-		super({ ...(options as IViewPaneOptions), titleMenuId: MenuId.ViewTitle, donotForwardArgs: false }, keybindingService, contextMenuService, configurationService, contextKeyService, viewDescriptorService, instantiationService, openerService, themeService, telemetryService);
+		super({ ...(options as IViewPaneOptions), titleMenuId: MenuId.ViewTitle, donotForwardArgs: false }, keybindingService, contextMenuService, configurationService, contextKeyService, viewDescriptorService, instantiationService, openerService, themeService, telemetryService, hoverService);
 		const { treeView } = (<ITreeViewDescriptor>Registry.as<IViewsRegistry>(Extensions.ViewsRegistry).getView(options.id));
 		this.treeView = treeView;
 		this._register(this.treeView.onDidChangeActions(() => this.updateActions(), this));
@@ -305,7 +305,7 @@ abstract class AbstractTreeView extends Disposable implements ITreeView {
 		}));
 		this._register(this.viewDescriptorService.onDidChangeLocation(({ views, from, to }) => {
 			if (views.some(v => v.id === this.id)) {
-				this.tree?.updateOptions({ overrideStyles: { listBackground: this.viewLocation === ViewContainerLocation.Panel ? PANEL_BACKGROUND : SIDE_BAR_BACKGROUND } });
+				this.tree?.updateOptions({ overrideStyles: getLocationBasedViewColors(this.viewLocation).listOverrideStyles });
 			}
 		}));
 		this.registerActions();
@@ -425,7 +425,8 @@ abstract class AbstractTreeView extends Disposable implements ITreeView {
 	}
 
 	private _badge: IViewBadge | undefined;
-	private _badgeActivity: IDisposable | undefined;
+	private readonly _activity = this._register(new MutableDisposable<IDisposable>());
+
 	get badge(): IViewBadge | undefined {
 		return this._badge;
 	}
@@ -437,19 +438,13 @@ abstract class AbstractTreeView extends Disposable implements ITreeView {
 			return;
 		}
 
-		if (this._badgeActivity) {
-			this._badgeActivity.dispose();
-			this._badgeActivity = undefined;
-		}
-
 		this._badge = badge;
-
 		if (badge) {
 			const activity = {
 				badge: new NumberBadge(badge.value, () => badge.tooltip),
 				priority: 50
 			};
-			this._badgeActivity = this.activityService.showViewActivity(this.id, activity);
+			this._activity.value = this.activityService.showViewActivity(this.id, activity);
 		}
 	}
 
@@ -695,9 +690,7 @@ abstract class AbstractTreeView extends Disposable implements ITreeView {
 			},
 			multipleSelectionSupport: this.canSelectMany,
 			dnd: this.treeViewDnd,
-			overrideStyles: {
-				listBackground: this.viewLocation === ViewContainerLocation.Panel ? PANEL_BACKGROUND : SIDE_BAR_BACKGROUND
-			}
+			overrideStyles: getLocationBasedViewColors(this.viewLocation).listOverrideStyles
 		}) as WorkbenchAsyncDataTree<ITreeItem, ITreeItem, FuzzyScore>);
 		treeMenus.setContextKeyService(this.tree.contextKeyService);
 		aligner.tree = this.tree;
@@ -772,7 +765,7 @@ abstract class AbstractTreeView extends Disposable implements ITreeView {
 		let command = element?.command;
 		if (element && !command) {
 			if ((element instanceof ResolvableTreeItem) && element.hasResolve) {
-				await element.resolve(new CancellationTokenSource().token);
+				await element.resolve(CancellationToken.None);
 				command = element.command;
 			}
 		}
@@ -1106,15 +1099,13 @@ class TreeRenderer extends Disposable implements ITreeRenderer<ITreeItem, FuzzyS
 		@IThemeService private readonly themeService: IThemeService,
 		@IConfigurationService private readonly configurationService: IConfigurationService,
 		@ILabelService private readonly labelService: ILabelService,
-		@IHoverService private readonly hoverService: IHoverService,
 		@ITreeViewsService private readonly treeViewsService: ITreeViewsService,
 		@IContextKeyService private readonly contextKeyService: IContextKeyService,
+		@IHoverService private readonly hoverService: IHoverService,
+		@IInstantiationService instantiationService: IInstantiationService,
 	) {
 		super();
-		this._hoverDelegate = {
-			showHover: (options: IHoverDelegateOptions) => this.hoverService.showHover(options),
-			delay: <number>this.configurationService.getValue('workbench.hover.delay')
-		};
+		this._hoverDelegate = this._register(instantiationService.createInstance(WorkbenchHoverDelegate, 'mouse', false, {}));
 		this._register(this.themeService.onDidFileIconThemeChange(() => this.rerender()));
 		this._register(this.themeService.onDidColorThemeChange(() => this.rerender()));
 		this._register(checkboxStateHandler.onDidChangeCheckboxState(items => {
@@ -1144,7 +1135,7 @@ class TreeRenderer extends Disposable implements ITreeRenderer<ITreeItem, FuzzyS
 		return { resourceLabel, icon, checkboxContainer, actionBar, container, elementDisposable: new DisposableStore() };
 	}
 
-	private getHover(label: string | undefined, resource: URI | null, node: ITreeItem): string | ITooltipMarkdownString | undefined {
+	private getHover(label: string | undefined, resource: URI | null, node: ITreeItem): string | IUpdatableHoverTooltipMarkdownString | undefined {
 		if (!(node instanceof ResolvableTreeItem) || !node.hasResolve) {
 			if (resource && !node.tooltip) {
 				return undefined;
@@ -1294,7 +1285,7 @@ class TreeRenderer extends Disposable implements ITreeRenderer<ITreeItem, FuzzyS
 				this.rerender();
 			}
 			if (!templateData.checkbox) {
-				const checkbox = new TreeItemCheckbox(templateData.checkboxContainer, this.checkboxStateHandler, this._hoverDelegate);
+				const checkbox = new TreeItemCheckbox(templateData.checkboxContainer, this.checkboxStateHandler, this._hoverDelegate, this.hoverService);
 				templateData.checkbox = checkbox;
 			}
 			templateData.checkbox.render(node);

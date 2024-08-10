@@ -4,7 +4,6 @@
  *--------------------------------------------------------------------------------------------*/
 
 import { CancellationToken } from 'vs/base/common/cancellation';
-import { Iterable } from 'vs/base/common/iterator';
 import { toDisposable } from 'vs/base/common/lifecycle';
 import { IRelaxedExtensionDescription } from 'vs/platform/extensions/common/extensions';
 import { ExtHostChatShape, IChatDto, IMainContext, MainContext, MainThreadChatShape } from 'vs/workbench/api/common/extHost.protocol';
@@ -49,17 +48,8 @@ export class ExtHostChat implements ExtHostChatShape {
 		});
 	}
 
-	transferChatSession(session: vscode.InteractiveSession, newWorkspace: vscode.Uri): void {
-		const sessionId = Iterable.find(this._chatSessions.keys(), key => this._chatSessions.get(key) === session) ?? 0;
-		if (typeof sessionId !== 'number') {
-			return;
-		}
-
-		this._proxy.$transferChatSession(sessionId, newWorkspace);
-	}
-
-	sendInteractiveRequestToProvider(providerId: string, message: vscode.InteractiveSessionDynamicRequest): void {
-		this._proxy.$sendRequestToProvider(providerId, message);
+	transferActiveChat(newWorkspace: vscode.Uri): void {
+		this._proxy.$transferActiveChatSession(newWorkspace);
 	}
 
 	async $prepareChat(handle: number, token: CancellationToken): Promise<IChatDto | undefined> {
@@ -78,11 +68,6 @@ export class ExtHostChat implements ExtHostChatShape {
 
 		return {
 			id,
-			requesterUsername: session.requester?.name,
-			requesterAvatarIconUri: session.requester?.icon,
-			responderUsername: session.responder?.name,
-			responderAvatarIconUri: session.responder?.icon,
-			inputPlaceholder: session.inputPlaceholder,
 		};
 	}
 

@@ -100,7 +100,7 @@ export class ExtensionManagementCLI {
 				}
 			}
 
-			const installed = await this.extensionManagementService.getInstalled(ExtensionType.User, installOptions.profileLocation);
+			const installed = await this.extensionManagementService.getInstalled(undefined, installOptions.profileLocation);
 
 			if (installVSIXInfos.length) {
 				await Promise.all(installVSIXInfos.map(async ({ vsix, installOptions }) => {
@@ -137,7 +137,7 @@ export class ExtensionManagementCLI {
 			}
 		}
 
-		this.logger.trace(localize('updateExtensionsQuery', "Fetching latest versions for {0} extensions", installedExtensionsQuery.length));
+		this.logger.trace(localize({ key: 'updateExtensionsQuery', comment: ['Placeholder is for the count of extensions'] }, "Fetching latest versions for {0} extensions", installedExtensionsQuery.length));
 		const availableVersions = await this.extensionGalleryService.getExtensions(installedExtensionsQuery, { compatible: true }, CancellationToken.None);
 
 		const extensionsToUpdate: InstallExtensionInfo[] = [];

@@ -103,11 +103,12 @@ export class WorkspaceTrustRequestHandler extends Disposable implements IWorkben
 		return !isSingleFolderWorkspaceIdentifier(toWorkspaceIdentifier(this.workspaceContextService.getWorkspace()));
 	}
 
-	private async registerListeners(): Promise<void> {
-		await this.workspaceTrustManagementService.workspaceResolved;
+	private registerListeners(): void {
 
 		// Open files trust request
 		this._register(this.workspaceTrustRequestService.onDidInitiateOpenFilesTrustRequest(async () => {
+			await this.workspaceTrustManagementService.workspaceResolved;
+
 			// Details
 			const markdownDetails = [
 				this.workspaceContextService.getWorkbenchState() !== WorkbenchState.EMPTY ?
@@ -148,6 +149,8 @@ export class WorkspaceTrustRequestHandler extends Disposable implements IWorkben
 
 		// Workspace trust request
 		this._register(this.workspaceTrustRequestService.onDidInitiateWorkspaceTrustRequest(async requestOptions => {
+			await this.workspaceTrustManagementService.workspaceResolved;
+
 			// Title
 			const message = this.useWorkspaceLanguage ?
 				localize('workspaceTrust', "Do you trust the authors of the files in this workspace?") :
@@ -828,7 +831,7 @@ class WorkspaceTrustTelemetryContribution extends Disposable implements IWorkben
 		type WorkspaceTrustInfoEventClassification = {
 			owner: 'sbatten';
 			comment: 'Information about the workspaces trusted on the machine';
-			trustedFoldersCount: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; isMeasurement: true; comment: 'The number of trusted folders on the machine' };
+			trustedFoldersCount: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; comment: 'The number of trusted folders on the machine' };
 		};
 
 		type WorkspaceTrustInfoEvent = {
@@ -854,7 +857,7 @@ class WorkspaceTrustTelemetryContribution extends Disposable implements IWorkben
 			owner: 'sbatten';
 			comment: 'Logged when the workspace transitions between trusted and restricted modes';
 			workspaceId: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; comment: 'An id of the workspace' };
-			isTrusted: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; isMeasurement: true; comment: 'true if the workspace is trusted' };
+			isTrusted: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; comment: 'true if the workspace is trusted' };
 		};
 
 		this.telemetryService.publicLog2<WorkspaceTrustStateChangedEvent, WorkspaceTrustStateChangedEventClassification>('workspaceTrustStateChanged', {
@@ -866,9 +869,9 @@ class WorkspaceTrustTelemetryContribution extends Disposable implements IWorkben
 			type WorkspaceTrustFolderInfoEventClassification = {
 				owner: 'sbatten';
 				comment: 'Some metrics on the trusted workspaces folder structure';
-				trustedFolderDepth: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; isMeasurement: true; comment: 'The number of directories deep of the trusted path' };
-				workspaceFolderDepth: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; isMeasurement: true; comment: 'The number of directories deep of the workspace path' };
-				delta: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; isMeasurement: true; comment: 'The difference between the trusted path and the workspace path directories depth' };
+				trustedFolderDepth: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; comment: 'The number of directories deep of the trusted path' };
+				workspaceFolderDepth: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; comment: 'The number of directories deep of the workspace path' };
+				delta: { classification: 'SystemMetaData'; purpose: 'FeatureInsight'; comment: 'The difference between the trusted path and the workspace path directories depth' };
 			};
 
 			type WorkspaceTrustFolderInfoEvent = {

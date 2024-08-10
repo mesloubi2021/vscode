@@ -570,7 +570,6 @@ export class CodeWindow extends BaseWindow implements ICodeWindow {
 				}
 			});
 
-
 			// Create the browser window
 			mark('code/willCreateCodeBrowserWindow');
 			this._win = new BrowserWindow(options);
@@ -779,9 +778,9 @@ export class CodeWindow extends BaseWindow implements ICodeWindow {
 
 		// Telemetry
 		type WindowErrorClassification = {
-			type: { classification: 'SystemMetaData'; purpose: 'PerformanceAndHealth'; isMeasurement: true; comment: 'The type of window error to understand the nature of the error better.' };
+			type: { classification: 'SystemMetaData'; purpose: 'PerformanceAndHealth'; comment: 'The type of window error to understand the nature of the error better.' };
 			reason: { classification: 'SystemMetaData'; purpose: 'PerformanceAndHealth'; comment: 'The reason of the window error to understand the nature of the error better.' };
-			code: { classification: 'SystemMetaData'; purpose: 'PerformanceAndHealth'; isMeasurement: true; comment: 'The exit code of the window process to understand the nature of the error better' };
+			code: { classification: 'SystemMetaData'; purpose: 'PerformanceAndHealth'; comment: 'The exit code of the window process to understand the nature of the error better' };
 			owner: 'bpasero';
 			comment: 'Provides insight into reasons the vscode window had an error.';
 		};
@@ -976,6 +975,13 @@ export class CodeWindow extends BaseWindow implements ICodeWindow {
 				const proxyBypassRules = newNoProxy ? `${newNoProxy},<local>` : '<local>';
 				this.logService.trace(`Setting proxy to '${proxyRules}', bypassing '${proxyBypassRules}'`);
 				this._win.webContents.session.setProxy({ proxyRules, proxyBypassRules, pacScript: '' });
+				type appWithProxySupport = Electron.App & {
+					setProxy(config: Electron.Config): Promise<void>;
+					resolveProxy(url: string): Promise<string>;
+				};
+				if (typeof (app as appWithProxySupport).setProxy === 'function') {
+					(app as appWithProxySupport).setProxy({ proxyRules, proxyBypassRules, pacScript: '' });
+				}
 			}
 		}
 	}

@@ -83,7 +83,7 @@ class TerminalLinkContribution extends DisposableStore implements ITerminalContr
 			});
 		}
 		const links = await this._getLinks();
-		return await this._terminalLinkQuickpick.show(links);
+		return await this._terminalLinkQuickpick.show(this._instance, links);
 	}
 
 	private async _getLinks(): Promise<{ viewport: IDetectedLinks; all: Promise<IDetectedLinks> }> {
@@ -126,6 +126,9 @@ registerActiveInstanceAction({
 registerActiveInstanceAction({
 	id: TerminalCommandId.OpenWebLink,
 	title: localize2('workbench.action.terminal.openLastUrlLink', 'Open Last URL Link'),
+	metadata: {
+		description: localize2('workbench.action.terminal.openLastUrlLink.description', 'Opens the last detected URL/URI link in the terminal')
+	},
 	f1: true,
 	category,
 	precondition: TerminalContextKeys.terminalHasBeenCreated,

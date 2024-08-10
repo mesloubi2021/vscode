@@ -7,6 +7,7 @@ import { PixelRatio } from 'vs/base/browser/pixelRatio';
 import { CodeWindow } from 'vs/base/browser/window';
 import { Emitter } from 'vs/base/common/event';
 import { Disposable } from 'vs/base/common/lifecycle';
+import { isObject } from 'vs/base/common/types';
 import { URI } from 'vs/base/common/uri';
 import { FontMeasurements } from 'vs/editor/browser/config/fontMeasurements';
 import { ICodeEditorService } from 'vs/editor/browser/services/codeEditorService';
@@ -20,7 +21,7 @@ const SCROLLABLE_ELEMENT_PADDING_TOP = 18;
 
 export const OutputInnerContainerTopPadding = 4;
 
-export interface NotebookDisplayOptions {
+export interface NotebookDisplayOptions { // TODO @Yoyokrazy rename to a more generic name, not display
 	showCellStatusBar: ShowCellStatusBarType;
 	cellToolbarLocation: string | { [key: string]: string };
 	cellToolbarInteraction: string;
@@ -45,7 +46,11 @@ export interface NotebookDisplayOptions {
 	outputFontFamily: string;
 	outputLineHeight: number;
 	markupFontSize: number;
-	editorOptionsCustomizations: any | undefined;
+	editorOptionsCustomizations: Partial<{
+		'editor.indentSize': 'tabSize' | number;
+		'editor.tabSize': number;
+		'editor.insertSpaces': boolean;
+	}> | undefined;
 }
 
 export interface NotebookLayoutConfiguration {
@@ -152,7 +157,12 @@ export class NotebookOptions extends Disposable {
 		// const { bottomToolbarGap, bottomToolbarHeight } = this._computeBottomToolbarDimensions(compactView, insertToolbarPosition, insertToolbarAlignment);
 		const fontSize = this.configurationService.getValue<number>('editor.fontSize');
 		const markupFontSize = this.configurationService.getValue<number>(NotebookSetting.markupFontSize);
-		const editorOptionsCustomizations = this.configurationService.getValue(NotebookSetting.cellEditorOptionsCustomizations);
+		let editorOptionsCustomizations = this.configurationService.getValue<Partial<{
+			'editor.indentSize': 'tabSize' | number;
+			'editor.tabSize': number;
+			'editor.insertSpaces': boolean;
+		}>>(NotebookSetting.cellEditorOptionsCustomizations) ?? {};
+		editorOptionsCustomizations = isObject(editorOptionsCustomizations) ? editorOptionsCustomizations : {};
 		const interactiveWindowCollapseCodeCells: InteractiveWindowCollapseCodeCells = this.configurationService.getValue(NotebookSetting.interactiveWindowCollapseCodeCells);
 
 		// TOOD @rebornix remove after a few iterations of deprecated setting
@@ -284,28 +294,33 @@ export class NotebookOptions extends Disposable {
 				return;
 			}
 
-			const options = this.codeEditorService.resolveDecorationOptions(e, true);
-			if (options.afterContentClassName || options.beforeContentClassName) {
-				const cssRules = this.codeEditorService.resolveDecorationCSSRules(e);
-				if (cssRules !== null) {
-					for (let i = 0; i < cssRules.length; i++) {
-						// The following ways to index into the list are equivalent
-						if (
-							((cssRules[i] as CSSStyleRule).selectorText.endsWith('::after') || (cssRules[i] as CSSStyleRule).selectorText.endsWith('::after'))
-							&& (cssRules[i] as CSSStyleRule).cssText.indexOf('top:') > -1
-						) {
-							// there is a `::before` or `::after` text decoration whose position is above or below current line
-							// we at least make sure that the editor top padding is at least one line
-							const editorOptions = this.configurationService.getValue<IEditorOptions>('editor');
-							updateEditorTopPadding(BareFontInfo.createFromRawSettings(editorOptions, PixelRatio.getInstance(this.targetWindow).value).lineHeight + 2);
-							decorationTriggeredAdjustment = true;
-							break;
+			try {
+				const options = this.codeEditorService.resolveDecorationOptions(e, true);
+				if (options.afterContentClassName || options.beforeContentClassName) {
+					const cssRules = this.codeEditorService.resolveDecorationCSSRules(e);
+					if (cssRules !== null) {
+						for (let i = 0; i < cssRules.length; i++) {
+							// The following ways to index into the list are equivalent
+							if (
+								((cssRules[i] as CSSStyleRule).selectorText.endsWith('::after') || (cssRules[i] as CSSStyleRule).selectorText.endsWith('::after'))
+								&& (cssRules[i] as CSSStyleRule).cssText.indexOf('top:') > -1
+							) {
+								// there is a `::before` or `::after` text decoration whose position is above or below current line
+								// we at least make sure that the editor top padding is at least one line
+								const editorOptions = this.configurationService.getValue<IEditorOptions>('editor');
+								updateEditorTopPadding(BareFontInfo.createFromRawSettings(editorOptions, PixelRatio.getInstance(this.targetWindow).value).lineHeight + 2);
+								decorationTriggeredAdjustment = true;
+								break;
+							}
 						}
 					}
 				}
+
+				decorationCheckSet.add(e);
+			} catch (_ex) {
+				// do not throw and break notebook
 			}
 
-			decorationCheckSet.add(e);
 		};
 		this._register(this.codeEditorService.onDecorationTypeRegistered(onDidAddDecorationType));
 		this.codeEditorService.listDecorationTypes().forEach(onDidAddDecorationType);

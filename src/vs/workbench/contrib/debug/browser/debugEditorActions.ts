@@ -67,7 +67,7 @@ class ToggleBreakpointAction extends Action2 {
 				if (toRemove) {
 					debugService.removeInstructionBreakpoints(toRemove.instructionReference, toRemove.offset);
 				} else {
-					debugService.addInstructionBreakpoint(location.reference, location.offset, location.address);
+					debugService.addInstructionBreakpoint({ instructionReference: location.reference, offset: location.offset, address: location.address, canPersist: false });
 				}
 			}
 			return;
@@ -275,6 +275,9 @@ class ToggleDisassemblyViewSourceCodeAction extends Action2 {
 			title: {
 				...nls.localize2('toggleDisassemblyViewSourceCode', "Toggle Source Code in Disassembly View"),
 				mnemonicTitle: nls.localize({ key: 'mitogglesource', comment: ['&& denotes a mnemonic'] }, "&&ToggleSource"),
+			},
+			metadata: {
+				description: nls.localize2('toggleDisassemblyViewSourceCodeDescription', 'Shows or hides source code in disassembly')
 			},
 			f1: true,
 		});
